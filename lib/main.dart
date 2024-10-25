@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
+import 'package:language_utility/Overlay.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,22 +19,7 @@ Future<void> main() async {
 void overlayMain() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(
-    MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: Scaffold(
-        backgroundColor: Colors.transparent, // Make the background transparent
-        body: Center(
-          child: Container(
-            width: 100, // Circle diameter
-            height: 100, // Circle diameter
-            decoration: BoxDecoration(
-              color: Colors.blue, // Circle color
-              shape: BoxShape.circle, // Shape as a circle
-            ),
-          ),
-        ),
-      ),
-    ),
+    OverlayWidget()
   );
 }
 
@@ -60,7 +46,9 @@ class _MyAppState extends State<MyApp> {
                       if (await FlutterOverlayWindow.isActive())
                         {FlutterOverlayWindow.closeOverlay()}
                       else
-                        {FlutterOverlayWindow.showOverlay()}
+                        {
+                          FlutterOverlayWindow.showOverlay(height: 100,width: 100)
+                        }
                     },
                 child: Text("press me"))
           ],
