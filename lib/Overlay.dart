@@ -11,27 +11,25 @@ class OverlayWidget extends StatefulWidget {
 }
 
 class _OverlayWidgetState extends State<OverlayWidget> {
-  String _clipboardData =
-      "Clipboard is empty"; // State variable to store clipboard data
-
-  // @override
-  // void initState() {
-  //   super.initState();
-  //   _setupOverlayListener(); // Move listener setup here
-  // }
-
-  // void _setupOverlayListener() {
-  //   print("setting listener");
-  //   FlutterOverlayWindow.overlayListener.listen((event) {
-  //     print("Overlay Event: $event");
-  //     // You can add logic to handle different types of events if needed
-  //   });
-  // }
-
-  // Method to copy clipboard data and update the state
+  String _clipboardData = "Clipboard is empty";
+  static const platform = MethodChannel('com.example.language-utility/clipboard');
   Future<void> _copyClipboardData() async {
-    print("sharing data");
-    await FlutterOverlayWindow.shareData("copy_clipboard_data");
+    try {
+      final String? clipboardData =
+          await platform.invokeMethod('getClipboardData');
+      print("Attempting to copy overlay data...");
+      if (clipboardData != null && clipboardData.isNotEmpty) {
+        setState(() {
+          _clipboardData = clipboardData;
+        });
+      } else {
+        setState(() {
+          _clipboardData = "Clipboard is empty";
+        });
+      }
+    } catch (e) {
+      print("Error accessing clipboard: $e");
+    }
   }
 
   // Method to process clipboard data (optional)

@@ -1,72 +1,51 @@
 // ignore_for_file: prefer_const_constructors
 
-import 'dart:ui';
-
+import 'dart:async';
+import 'package:flutter_background/flutter_background.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import 'package:language_utility/Overlay.dart';
 
+final GlobalKey<_MyAppState> myAppStateKey = GlobalKey<_MyAppState>();
+const MethodChannel platform = MethodChannel('com.example.language-utility/clipboard');
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Ensure permissions are requested or already granted
+  _setupMethodChannel();
   if (!await FlutterOverlayWindow.isPermissionGranted()) {
     await FlutterOverlayWindow.requestPermission();
   }
-  await initializeService();
-  runApp(const MyApp());
+  final androidConfig = FlutterBackgroundAndroidConfig(
+    notificationTitle: "Background Task Example",
+    notificationText: "Running in the background",
+    notificationImportance: AndroidNotificationImportance.normal,
+    enableWifiLock: true,
+  );
+
+  bool hasPermissions =
+      await FlutterBackground.initialize(androidConfig: androidConfig);
+  if (hasPermissions) {
+    runApp(MyApp(key: myAppStateKey));
+  }
 }
+
+void _setupMethodChannel() {
+  platform.setMethodCallHandler((call) async {
+    if (call.method == 'getClipboardData') {
+      ClipboardData? clipboardData = await Clipboard.getData('text/plain');
+      return clipboardData?.text ?? "Clipboard is empty";
+    }
+    return null;
+  });
+}
+
+
 
 @pragma("vm:entry-point")
 void overlayMain() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(OverlayWidget());
-}
-
-Future<void> initializeService() async {
-  final service = FlutterBackgroundService();
-
-  // Configure the background service
-  await service.configure(
-    androidConfiguration: AndroidConfiguration(
-      // This will be executed when the app is in the background
-      onStart: onStart,
-
-      // Automatically start the service
-      autoStart: true,
-
-      // No foreground service settings needed
-      isForegroundMode: false,
-    ),
-    iosConfiguration: IosConfiguration(
-      // Automatically start service on iOS as well if needed
-      autoStart: true,
-
-      // No need for onForeground or onBackground in this case since we're not using foreground services
-    ),
-  );
-}
-
-@pragma('vm:entry-point')
-void onStart(ServiceInstance service) async {
-  DartPluginRegistrant.ensureInitialized();
-
-  // Listen for the 'copyClipboard' event
-  service.on('copyClipboard').listen((event) async {
-    // Access clipboard data when the button is clicked in the overlay
-    ClipboardData? clipboardData = await Clipboard.getData('text/plain');
-    if (clipboardData != null && clipboardData.text != null) {
-      // Process your clipboard data here
-      print("Clipboard Data on Button Click: ${clipboardData.text}");
-      // You can also send this data back to the main app if needed
-      service.invoke('updateClipboardData', {"data": clipboardData.text});
-    } else {
-      print("Clipboard is empty on Button Click.");
-    }
-  });
-
-  // You can add other background processing tasks here if needed
 }
 
 class MyApp extends StatefulWidget {
@@ -78,25 +57,43 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   String _clipboardData = "Clipboard is empty";
-
+  Timer? _timer;
+  bool isRunning = false;
+static const platform = MethodChannel('com.example.language-utility/clipboard');
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _setupOverlayListener(); // Move listener setup here
   }
 
-  void _setupOverlayListener() {
-    print("setting listener");
-    FlutterOverlayWindow.overlayListener.listen((event) {
-      print("Overlay Event: $event");
-      // You can add logic to handle different types of events if needed
+  void startBackgroundTask() async {
+    bool success = await FlutterBackground.enableBackgroundExecution();
+    if (success) {
+      setState(() {
+        isRunning = true;
+      });
+      FlutterOverlayWindow.overlayListener.listen((event) {
+        print("Overlay Event: $event");
+        // You can add logic to handle different types of events if needed
+      });
+      _timer = Timer.periodic(Duration(seconds: 2), (timer) {
+        print("Background task running: ${DateTime.now()}");
+      });
+    }
+  }
+
+  void stopBackgroundTask() async {
+    _timer?.cancel();
+    await FlutterBackground.disableBackgroundExecution();
+    setState(() {
+      isRunning = false;
     });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    stopBackgroundTask();
     super.dispose();
   }
 
@@ -117,11 +114,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   Future<void> _copyClipboardData() async {
     try {
-      ClipboardData? clipboardData = await Clipboard.getData('text/plain');
+      final String? clipboardData =
+          await platform.invokeMethod('getClipboardData');
       print("Attempting to copy overlay data...");
-      if (clipboardData != null && clipboardData.text != null) {
+      if (clipboardData != null && clipboardData.isNotEmpty) {
         setState(() {
-          _clipboardData = clipboardData.text!;
+          _clipboardData = clipboardData;
         });
       } else {
         setState(() {
